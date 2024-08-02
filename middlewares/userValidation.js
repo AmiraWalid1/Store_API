@@ -3,7 +3,7 @@ const {
 } = require("express-validator");
 const {User} = require('../models/user');
 
-const Registration = [
+const validateRegister= [
   body("username")
     .trim()
     .notEmpty().withMessage("name feild is required")
@@ -20,11 +20,12 @@ const Registration = [
     .isLength({min: 8}).withMessage('Password must be at least 8 characters long')
 ];
 
-const Login = [
+const validateLogin = [
   body("email")
     .isEmail().withMessage('Please enter a valid email')
   ,body("password")
     .trim()
     .notEmpty().withMessage("Password feild is required")
 ];
-module.exports = {Registration, Login};
+
+module.exports = {validateRegister, validateLogin};

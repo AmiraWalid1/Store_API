@@ -3,12 +3,12 @@ const {User} = require('../models/user')
 const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const {authenticate} = require('../middlewares/authenticate')
-const {Registration, Login} = require('../middlewares/userValidation');
+const {validateRegister, validateLogin} = require('../middlewares/userValidation');
 const { validationResult } = require('express-validator');
 const router = express.Router();
 
 // Register new user
-router.post('/register',Registration, async(req, res, next) => {
+router.post('/register',validateRegister, async(req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()){
     return res.status(400).json({ errors: errors.array() });
@@ -26,7 +26,7 @@ router.post('/register',Registration, async(req, res, next) => {
 });
 
 // Login user
-router.post('/login', Login, async(req, res, next) => {
+router.post('/login', validateLogin, async(req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()){
     return res.status(400).json({ errors: errors.array() });
@@ -53,7 +53,7 @@ router.post('/login', Login, async(req, res, next) => {
 });
 
 // Promote user to supervisor
-router.patch("/promote", authenticate ,async(req, res, err) =>{
+router.patch("/promote", authenticate ,async(req, res, next) =>{
   console.log(req.user);
   if (req.user.role !== 'admin'){
     return res.status(403).send("Forbidden: Insufficient permissions");

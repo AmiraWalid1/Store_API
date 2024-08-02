@@ -1,11 +1,13 @@
 const express = require('express');
 const {Product} = require('../models/product')
 const {authenticate} = require('../middlewares/authenticate');
-const { validateProduct, validateProductUpdate } = require("../middlewares/productValidation")
-const { validationResult } = require('express-validator');
+const { validateProduct, validateProductUpdate, validateProductDelete } = require("../middlewares/productValidation")
+const { body, validationResult } = require('express-validator');
 const multer = require("multer");
 const path = require('path')
-const User = require('../models/user')
+const {User} = require('../models/user')
+const bcrypt = require('bcryptjs');
+const  mongoose = require('mongoose');
 
 const router = express.Router();
 const upload = multer({
@@ -14,11 +16,18 @@ const upload = multer({
     filename: (req, file, func)=>{
       func(null, file.originalname);
     }
-  })
+  }),
+  fileFilter: (req, file, cb) => {
+    // Check if the file is an image
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'), false);
+    }
+    cb(null, true);
+  }
 });
 
 //  Get all products (Public).
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const products = await Product.find();
     res.status(200).json(products);
@@ -28,7 +37,7 @@ router.get('/', async (req, res) => {
 });
 
 // Add a new product (Admin and Supervisor).
-router.post('/', validateProduct, authenticate , upload.single("imageFile"), async (req, res) => {
+router.post('/', upload.single("imageFile"), validateProduct, authenticate , async (req, res,next) => {
   if (req.user.role !== 'admin' && req.user.role !== 'supervisor') {
     return res.status(403).send("Forbidden: Insufficient permissions");
   }
@@ -39,6 +48,7 @@ router.post('/', validateProduct, authenticate , upload.single("imageFile"), asy
   }
 
   const { name, description, price, imageUrl} = req.body;
+  console.log({ name, description, price, imageUrl});
   let imagePath;
   if(!req.file) {
     imagePath = imageUrl;
@@ -56,19 +66,23 @@ router.post('/', validateProduct, authenticate , upload.single("imageFile"), asy
 });
 
 // Edit a product by id (Admin only).
-router.patch('/:id', validateProductUpdate, authenticate , upload.single("imageFile"), async (req, res) => {
+router.patch('/:id', upload.single("imageFile"), validateProductUpdate, authenticate , async (req, res, next) => {
   if (req.user.role !== 'admin') {
     return res.status(403).send("Forbidden: Insufficient permissions"); 
   }
   
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).send('Invalid product ID');
+  }
+
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
   
   const { name, description, price, imageUrl} = req.body;
-  const { id } = req.params;
-  
   try {
     const product = await Product.findById(id);
     if (!product){
@@ -104,6 +118,10 @@ router.delete('/:id', authenticate, async (req, res, next) => {
   }
 
   const { id } = req.params;
+  
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).send('Invalid product ID');
+  }
 
   try {
     const product = await Product.findByIdAndDelete(id);
@@ -118,7 +136,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
 
 
 // Delete all products (Admin only, requires password confirmation).
-router.delete('/', authenticate , async (req, res) => {
+router.delete('/', validateProductDelete, authenticate, async (req, res, next) => {
   try {
     const { password } = req.body; 
 
@@ -129,6 +147,10 @@ router.delete('/', authenticate , async (req, res) => {
 
     // Validate password
     const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).send("User not found");
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
@@ -137,11 +159,10 @@ router.delete('/', authenticate , async (req, res) => {
 
     // Delete all products
     await Product.deleteMany({});
-    res.status(204).send();
+    res.status(204).send(); 
   } catch (err) {
-    next(err);
+    next(err); 
   }
-  
 });
 
 module.exports = router;
